@@ -89,21 +89,23 @@ tokens.forEach((token, index) => {
       if (fs.existsSync(audioPath)) {
         
         setTimeout(() => {
-          // OPTIMIZED PIPELINE: Use FFmpeg for volume + Opus encoding
-          // This offloads the heavy work from the Node.js main thread
+          // REDUCED LOAD PIPELINE: Lower volume and more compatible stream type
           const ffmpegProcess = spawn(ffmpegPath, [
             '-i', audioPath,
-            '-af', 'volume=5.0',
-            '-acodec', 'libopus',
-            '-f', 'opus',
+            '-af', 'volume=2.5', // Reduced from 5.0 to 2.5 for better Discord support
+            '-f', 's16le',
             '-ar', '48000',
             '-ac', '2',
             'pipe:1'
           ]);
 
+          ffmpegProcess.on('error', err => {
+            console.error(`[Bot ${botNum}] FFmpeg Spawn Error:`, err.message);
+          });
+
           const resource = createAudioResource(ffmpegProcess.stdout, {
-            inputType: StreamType.OggOpus,
-            inlineVolume: false // Volume is already applied by FFmpeg
+            inputType: StreamType.Raw, // Raw PCM is most stable for Discord
+            inlineVolume: false
           });
 
           if (!player) {
@@ -115,23 +117,17 @@ tokens.forEach((token, index) => {
 
             player.on('error', error => {
               console.error(`[Bot ${botNum}] Player Error:`, error.message);
-              // Auto-restart on error if possible
-              if (message.content === '!kacst') player.play(resource);
             });
 
             player.on(AudioPlayerStatus.Idle, () => {
               console.log(`[Bot ${botNum}] Finished playing.`);
             });
-
-            player.on(AudioPlayerStatus.Buffering, () => {
-              console.log(`[Bot ${botNum}] Buffering...`);
-            });
           }
 
           player.play(resource);
           connection.subscribe(player);
-          console.log(`[Bot ${botNum}] OPTIMIZED PLAYING 🔊🌋☢️`);
-        }, index * 100);
+          console.log(`[Bot ${botNum}] PLAYING (Optimized Load) 🔊`);
+        }, index * 200); // Increased stagger delay to 200ms to reduce CPU spike
       }
     }
 
